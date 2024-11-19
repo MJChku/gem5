@@ -155,6 +155,27 @@ class SnoopFilter(SimObject):
     max_capacity = Param.MemorySize("8MiB", "Maximum capacity of snoop filter")
 
 
+class L1XBar(NoncoherentXBar):
+    # 64-bit crossbar by default
+    width = 8
+
+    # Assume that most of this is covered by the cache latencies, with
+    # no more than a single pipeline stage for any packet.
+    frontend_latency = 1
+    forward_latency = 0
+    response_latency = 1
+
+
+class __L2XBar(NoncoherentXBar):
+    # 256-bit crossbar by default
+    width = 32
+    # Assume that most of this is covered by the cache latencies, with
+    # no more than a single pipeline stage for any packet.
+    frontend_latency = 1
+    forward_latency = 0
+    response_latency = 1
+
+
 # We use a coherent crossbar to connect multiple requestors to the L2
 # caches. Normally this crossbar would be part of the cache itself.
 class L2XBar(CoherentXBar):
@@ -176,8 +197,17 @@ class L2XBar(CoherentXBar):
     # This specialisation of the coherent crossbar is to be considered
     # the point of unification, it connects the dcache and the icache
     # to the first level of unified cache.
-    point_of_unification = True
+    # point_of_unification = True
 
+class L3XBar(CoherentXBar):
+    # 256-bit crossbar by default
+    width = 32
+    frontend_latency = 1
+    forward_latency = 0
+    response_latency = 1
+    snoop_response_latency = 1
+    snoop_filter = SnoopFilter(lookup_latency = 0)
+    point_of_unification = True
 
 # One of the key coherent crossbar instances is the system
 # interconnect, tying together the CPU clusters, GPUs, and any I/O

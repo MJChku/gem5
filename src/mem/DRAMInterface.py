@@ -498,6 +498,111 @@ class DDR3_2133_8x8(DDR3_1600_8x8):
     VDD = "1.5V"
 
 
+class DDR4_3200_16x4(DRAMInterface):
+    """
+    A single DDR4-3200 x64 channel (one command and address bus), with
+    timings based on a DDR4-3200 8 Gbit datasheet (Micron MT40A2G4)
+    in a 16x4 configuration.
+
+    Total channel capacity is 32GiB.
+
+    16 devices/rank * 2 ranks/channel * 1GiB/device = 32GiB/channel
+    """
+
+    # size of device
+    device_size = "1GiB"
+
+    # 16x4 configuration, 16 devices each with a 4-bit interface
+    device_bus_width = 4
+
+    # DDR4 is a BL8 device
+    burst_length = 8
+
+    # Each device has a page (row buffer) size of 512 byte (1K columns x4)
+    device_rowbuffer_size = "512B"
+
+    # 16x4 configuration, so 16 devices
+    devices_per_rank = 16
+
+    # Match our DDR3 configurations which is dual rank
+    ranks_per_channel = 2
+
+    # DDR4 has 2 (x16) or 4 (x4 and x8) bank groups
+    bank_groups_per_rank = 4
+
+    # DDR4 has 16 banks(x4,x8) and 8 banks(x16)
+    banks_per_rank = 16
+
+    # Override the default buffer sizes to accommodate the larger bank count
+    write_buffer_size = 128
+    read_buffer_size = 64
+
+    # 1600 MHz (DDR4-3200)
+    tCK = "0.625ns"  # Reduced for DDR4-3200
+
+    # Burst length and CAS-to-CAS delay
+    tBURST = "2.5ns"  # Adjusted based on higher frequency
+
+    # @3200 data rate, CAS-to-CAS delay for bursts to the same bank group
+    tCCD_L = "3.75ns"  # Lowered to reflect the faster data rate
+
+    # DDR4-3200 22-22-22
+    tRCD = "13.75ns"  # Adjusted for DDR4-3200 timing
+    tCL = "13.75ns"
+    tRP = "13.75ns"
+    tRAS = "32ns"  # Similar to 2400, DDR4-3200 often retains this value
+
+    # RRD_S (different bank group) for 512B page is MAX(4 CK, 2.5ns)
+    tRRD = "2.5ns"  # Reduced for DDR4-3200
+
+    # RRD_L (same bank group) for 512B page is MAX(4 CK, 3.75ns)
+    tRRD_L = "3.75ns"  # Lowered for DDR4-3200
+
+    # tFAW for 512B page is MAX(16 CK, 12ns)
+    tXAW = "12ns"  # Adjusted based on 3200 data rate
+    activation_limit = 4
+    # tRFC for DDR4-3200 often remains around 350ns
+    tRFC = "350ns"
+
+    tWR = "15ns"  # Generally stays the same across data rates
+
+    # Average of WTR_S and WTR_L for DDR4-3200
+    tWTR = "3.75ns"  # Reduced from DDR4-2400
+
+    # Greater of 4 CK or 5 ns
+    tRTP = "5ns"  # Lower due to faster data rate
+
+    # Default same-rank rd-to-wr bus turnaround is 2 CK @ 1600 MHz = 1.25 ns
+    tRTW = "1.25ns"
+
+    # Default different rank bus delay is 2 CK @ 1600 MHz = 1.25 ns
+    tCS = "1.25ns"
+
+    # <=85C, half for >85C
+    tREFI = "7.8us"  # Remains unchanged
+
+    # Active powerdown and precharge powerdown exit time
+    tXP = "5ns"  # Reduced based on 3200 data rate
+
+    # Self-refresh exit time
+    # Exit delay to ACT, PRE, PREALL, REF, SREF Enter, and PD Enter
+    tXS = "340ns"  # Remains similar
+
+    # Current values from datasheet
+    IDD0 = "48mA"   # Power values may slightly increase due to higher frequency
+    IDD02 = "3mA"
+    IDD2N = "36mA"
+    IDD3N = "40mA"
+    IDD3N2 = "3mA"
+    IDD4W = "115mA"
+    IDD4R = "120mA"
+    IDD5 = "280mA"
+    IDD3P1 = "34mA"
+    IDD2P1 = "27mA"
+    IDD6 = "32mA"
+    VDD = "1.2V"
+    VDD2 = "2.5V"
+
 # A single DDR4-2400 x64 channel (one command and address bus), with
 # timings based on a DDR4-2400 8 Gbit datasheet (Micron MT40A2G4)
 # in an 16x4 configuration.
