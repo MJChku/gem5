@@ -48,7 +48,10 @@ class Adapter : public EventManager
     bool sync;
     bool isListen;
     Tick pollInterval;
+  protected:
     EventFunctionWrapper inEvent;
+    
+  private:
     EventFunctionWrapper outSyncEvent;
     struct SimbricksBaseIf baseIf;
     struct SimbricksBaseIfSHMPool *pool;
@@ -79,6 +82,7 @@ class Adapter : public EventManager
     void startup();
 
     bool poll();
+    bool peek(uint64_t ts);
 
     void inDone(volatile union SimbricksProtoBaseMsg *msg) {
         SimbricksBaseIfInDone(&baseIf, msg);
@@ -96,8 +100,20 @@ class Adapter : public EventManager
         return msg;
     }
 
+    volatile union SimbricksProtoBaseMsg *outAllocT0() {
+        volatile union SimbricksProtoBaseMsg *msg;
+        do {
+            msg = SimbricksBaseIfOutAlloc(&baseIf, 0);
+        } while (!msg);
+        return msg;
+    }
+
     void outSend(volatile union SimbricksProtoBaseMsg *msg, uint8_t ty) {
         SimbricksBaseIfOutSend(&baseIf, msg, ty);
+    }
+    
+    size_t outMaxSize() {
+      return SimbricksBaseIfOutMsgLen(&baseIf);
     }
 };
 
@@ -150,6 +166,10 @@ class GenericBaseAdapter : public Adapter
 
     volatile TMO *outAlloc() {
         return (volatile TMO *) Adapter::outAlloc();
+    }
+
+    volatile TMO *outAllocT0() {
+      return (volatile TMO *) Adapter::outAllocT0();
     }
 
     void outSend(volatile TMO *msg, uint8_t ty) {

@@ -65,18 +65,22 @@ Adapter::close()
 void
 Adapter::processInEvent()
 {
-    DPRINTF(SimBricks, "simbricks: processInEvent\n");
+    // DPRINTF(SimBricks, "simbricks: processInEvent\n");
 
     /* run what we can */
     while (poll());
 
     if (sync) {
-        /* in sychronized mode we might need to wait till we get a message with
-         * a timestamp allowing us to proceed */
-        uint64_t nextTs;
-        while ((nextTs = SimbricksBaseIfInTimestamp(&baseIf)) <=
-               curTickAsSimbricksTs()) {
-          poll();
+        /* In sychronized mode, we might need to wait till we get a message with
+         * a timestamp allowing us to proceed. In that case, reschedule
+         * processInEvent to give other adapters the chance to already make
+         * progress. This is also necessary to allow the SimBricks
+         * MemSidechannel to process incoming messages while blocking here. */
+        uint64_t nextTs = SimbricksBaseIfInTimestamp(&baseIf);
+        // printf("gem5 : nextTs = %lu, cur %lu; sockpath %s\n", nextTs, curTickAsSimbricksTs(),baseIf.params.sock_path);
+        if (nextTs <= curTickAsSimbricksTs()) {
+            schedule(inEvent, curTick());
+            return;
         }
 
         schedule(inEvent, fromSimbricksTs(nextTs));
@@ -209,6 +213,14 @@ Adapter::poll()
 
     handleInMsg(msg);
     return true;
+}
+
+bool
+Adapter::peek(uint64_t ts)
+{
+    volatile union SimbricksProtoBaseMsg *msg =
+        SimbricksBaseIfInPeek(&baseIf, ts);
+    return msg != NULL;
 }
 
 } // namespace base
