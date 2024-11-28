@@ -49,13 +49,15 @@ from gem5.isas import ISA
 # specific instantiations.
 
 
+
 class L1Cache(Cache):
-    assoc = 2
-    tag_latency = 2
-    data_latency = 2
-    response_latency = 2
-    mshrs = 4
-    tgts_per_mshr = 20
+    assoc = 8
+    tag_latency = 1
+    data_latency = 1
+    response_latency = 1
+    mshrs = 128
+    tgts_per_mshr = 16
+    write_buffers = 56
 
 
 class L1_ICache(L1Cache):
@@ -67,15 +69,34 @@ class L1_ICache(L1Cache):
 class L1_DCache(L1Cache):
     pass
 
-
 class L2Cache(Cache):
-    assoc = 8
-    tag_latency = 20
-    data_latency = 20
-    response_latency = 20
-    mshrs = 20
-    tgts_per_mshr = 12
-    write_buffers = 8
+    assoc = 16
+    # tag_latency = 1
+    # data_latency = 8
+    # response_latency = 1
+    # mshrs = 40
+    # tgts_per_mshr = 20
+    # write_buffers = 40
+
+    tag_latency = 5
+    data_latency = 5
+    response_latency = 1
+    mshrs = 256
+    tgts_per_mshr = 16
+    write_buffers = 256
+
+class L3Cache(Cache):
+    assoc = 11
+    tag_latency = 23
+    data_latency = 23
+    response_latency = 1
+    # mshrs = 128
+    # tgts_per_mshr = 20
+    # write_buffers = 128
+    # data_latency = 60
+    mshrs = 256
+    tgts_per_mshr = 16
+    write_buffers = 256
 
 
 class IOCache(Cache):
@@ -89,11 +110,20 @@ class IOCache(Cache):
 
 
 class PageTableWalkerCache(Cache):
-    assoc = 2
-    tag_latency = 2
-    data_latency = 2
-    response_latency = 2
-    mshrs = 10
-    size = "1kB"
-    tgts_per_mshr = 12
+    # assoc = 2
+    # tag_latency = 2
+    # data_latency = 2
+    # response_latency = 2
+    # mshrs = 10
+    # size = "1kB"
+    # tgts_per_mshr = 12
+    # is_read_only = False
+
+    assoc = 8
+    tag_latency = 1
+    data_latency = 1
+    response_latency = 1
+    mshrs = 32
+    size = "8kB"
+    tgts_per_mshr = 8
     is_read_only = False

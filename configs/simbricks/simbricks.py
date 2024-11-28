@@ -35,7 +35,8 @@ def malformedSimBricksUrl(s):
 #        listen:UX_SOCKET_PATH:SHM_PATH
 # ARGS = :sync | :link_latency=XX | :sync_interval=XX
 def parseSimBricksUrl(s):
-    out = {"sync": False}
+    # out = {"sync": False}
+    out = {}
     parts = s.split(":")
     if len(parts) < 2:
         malformedSimBricksUrl(s)
@@ -181,6 +182,7 @@ def makeX86System(mem_mode, numCPUs=1, mdesc=None, workload=None, Ruby=False):
             super(SimBricksPc, self).__init__()
             self._num_simbricks = 0
             self._num_simbricks_mem = 0
+            self._num_simbricks_mem_sidechannel = 0
             self._devid_next = 0
 
         def add_simbricks_pci(self, url):
@@ -197,6 +199,14 @@ def makeX86System(mem_mode, numCPUs=1, mdesc=None, workload=None, Ruby=False):
             setattr(self, "simbricks_" + str(self._num_simbricks), dev)
             self._devid_next += 1
             self._num_simbricks += 1
+
+        def add_simbricks_mem_sidechannel(self, url):
+            print("adding simbricks mem_sidechannel:", url)
+            params = parseSimBricksUrl(url)
+            dev = SimBricksMemSidechannel(**params)
+            dev.system = Parent.any
+            setattr(self, "simbricks_mem_sidechannel_" + str(self._num_simbricks_mem_sidechannel), dev)
+            self._num_simbricks_mem_sidechannel += 1
 
         def add_simbricks_e1000_eth(self, url):
             print("adding simbricks eth:", url)
@@ -247,9 +257,14 @@ def makeX86System(mem_mode, numCPUs=1, mdesc=None, workload=None, Ruby=False):
                 f"connecting {self._num_simbricks_mem} mem simbricks "
                 "adapters"
             )
+
             for i in range(0, self._num_simbricks_mem):
                 mem = getattr(self, "simbricks_mem_" + str(i))
                 mem.port = membus.mem_side_ports
+            
+            for i in range(0, self._num_simbricks_mem_sidechannel):
+                dev = getattr(self, "simbricks_mem_sidechannel_" + str(i))
+                dev.port = bus.cpu_side_ports
 
     # Platform
     self.pc = SimBricksPc()
@@ -263,6 +278,9 @@ def makeX86System(mem_mode, numCPUs=1, mdesc=None, workload=None, Ruby=False):
 
     for url in args.simbricks_mem:
         self.pc.add_simbricks_mem(url)
+
+    for url in args.simbricks_mem_sidechannel:
+        self.pc.add_simbricks_mem_sidechannel(url)
 
     self.pc.com_1.device = Terminal(port=args.termport, outfile="stdoutput")
 
@@ -483,6 +501,12 @@ def build_system(np):
     #     sys.iocache.mem_side = sys.tol3bus.cpu_side_ports
 
     if args.caches or args.l2cache:
+        # pass
+        # another_bridge = Bridge(delay="0ns", ranges=sys.mem_ranges)
+        # another_bridge.mem_side_port = sys.tol2bus.cpu_side_ports
+        # another_bridge.cpu_side_port = sys.iobus.mem_side_ports
+        # sys.another_bridge = another_bridge
+
         # By default the IOCache runs at the system clock
         sys.iocache = IOCache(
             addr_ranges=sys.mem_ranges,
@@ -493,24 +517,33 @@ def build_system(np):
             write_buffers=64,
         )
         sys.iocache.cpu_side = sys.iobus.mem_side_ports
-        sys.iocache.mem_side = sys.tol2bus.cpu_side_ports
+        # sys.iocache.mem_side = sys.tol2bus.cpu_side_ports
+        sys.iocache.mem_side = sys.tol3bus.cpu_side_ports
+
+        # self.toL1Bus.cpu_side_ports
+        # print("sys.memranges", sys.mem_ranges)
+        # another_bridge = Bridge(delay="0ns", ranges=sys.mem_ranges)
+        # another_bridge.mem_side_port = sys.cpu[0].toL1Bus.cpu_side_ports
+        # another_bridge.cpu_side_port = sys.iobus.mem_side_ports
+        # sys.another_bridge = another_bridge
+
     elif not args.external_memory_system:
         sys.iobridge = Bridge(delay="50ns", ranges=sys.mem_ranges)
         sys.iobridge.cpu_side_port = sys.iobus.mem_side_ports
         sys.iobridge.mem_side_port = sys.membus.cpu_side_ports
 
     # parametrize caches a bit
-    sys.l2.assoc = 16
-    sys.l2.assoc = 16
-    for cpu in sys.cpu:
-        cpu.dcache.data_latency = 0
-        cpu.dcache.response_latency = 0
-        cpu.dcache.tag_latency = 0
-        cpu.dcache.tags.tag_latency = 0
-        cpu.icache.data_latency = 0
-        cpu.icache.response_latency = 0
-        cpu.icache.tag_latency = 0
-        cpu.icache.tags.tag_latency = 0
+    # sys.l2.assoc = 16
+    # for cpu in sys.cpu:
+    #     cpu.dcache.data_latency = 0
+    #     cpu.dcache.response_latency = 0
+    #     cpu.dcache.tag_latency = 0
+    #     cpu.dcache.tags.tag_latency = 0
+    #     cpu.icache.data_latency = 0
+    #     cpu.icache.response_latency = 0
+    #     cpu.icache.tag_latency = 0
+    #     cpu.icache.tags.tag_latency = 0
+    #     cpu.l2cache.assoc = 16
 
     param_cpus(sys.cpu)
 
@@ -603,6 +636,15 @@ parser.add_argument(
     default=[],
     help="Simbricks Mem blocks to add: SIZE@ADDR@ASID@URL",
 )
+
+parser.add_argument(
+    "--simbricks-mem_sidechannel",
+    action="append",
+    type=str,
+    default=[],
+    help="Simbricks memory side channel devices to add",
+)
+
 parser.add_argument(
     "--command-line-append",
     action="store",
@@ -612,7 +654,6 @@ parser.add_argument(
 )
 
 args = parser.parse_args()
-
 
 # system under test can be any CPU
 (TestCPUClass, test_mem_mode, FutureClass) = Simulation.setCPUClass(args)

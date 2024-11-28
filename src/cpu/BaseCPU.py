@@ -54,6 +54,8 @@ from m5.proxy import *
 from m5.SimObject import *
 from m5.util.fdthelper import *
 
+from m5.objects.XBar import L1XBar
+
 default_tracer = ExeTracer()
 
 
@@ -159,6 +161,7 @@ class BaseCPU(ClockedObject):
 
     icache_port = RequestPort("Instruction Port")
     dcache_port = RequestPort("Data Port")
+
     _cached_ports = ["icache_port", "dcache_port"]
 
     _uncached_interrupt_response_ports = []
@@ -189,10 +192,17 @@ class BaseCPU(ClockedObject):
         )
 
     def addPrivateSplitL1Caches(self, ic, dc, iwc=None, dwc=None):
+        print("MJC: BaseCPU.py: addPrivateSplitL1Caches")
         self.icache = ic
         self.dcache = dc
         self.icache_port = ic.cpu_side
         self.dcache_port = dc.cpu_side
+
+        #MJC crossbar to connect to dcache
+        # self.toL1Bus = L1XBar()
+        # self.dcache_port = self.toL1Bus.cpu_side_ports
+        # self.toL1Bus.mem_side_ports = dc.cpu_side
+
         self._cached_ports = ["icache.mem_side", "dcache.mem_side"]
         if iwc and dwc:
             self.itb_walker_cache = iwc
@@ -211,6 +221,35 @@ class BaseCPU(ClockedObject):
             self._cached_ports += [
                 "checker." + port for port in self.ArchMMU.walkerPorts()
             ]
+    def addPrivateSplitL2Cache(self, ic, dc, l2c, iwc=None, dwc=None):
+        """
+        Adds both L1 and L2 caches as private caches for each core.
+        This function sets up L1 instruction and data caches, along with a
+        dedicated L2 cache for each CPU.
+        
+        Parameters:
+            ic: The L1 instruction cache.
+            dc: The L1 data cache.
+            l2c: The private L2 cache.
+            iwc: Optional instruction TLB walker cache.
+            dwc: Optional data TLB walker cache.
+        """
+        # Set up private L1 instruction and data caches.
+        self.addPrivateSplitL1Caches(ic, dc, iwc, dwc)
+        
+        # Set up the private L2 cache
+        print("MJC: BaseCPU.py: addPrivateSplitL2Cache")
+        self.l2cache = l2c
+        self.toL2Bus = L2XBar()  # Crossbar for connecting L1 caches to L2
+        
+        # Connect L1 instruction and data caches and PW cache to the L2 crossbar
+        self.connectCachedPorts(self.toL2Bus.cpu_side_ports)
+        
+        # Connect the L2 crossbar to the L2 cache
+        self.toL2Bus.mem_side_ports = l2c.cpu_side
+        
+        # Register L2 cache as a cached port
+        self._cached_ports.append("l2cache.mem_side")
 
     def addTwoLevelCacheHierarchy(
         self, ic, dc, l2c, iwc=None, dwc=None, xbar=None
@@ -221,6 +260,39 @@ class BaseCPU(ClockedObject):
         self.l2cache = l2c
         self.toL2Bus.mem_side_ports = self.l2cache.cpu_side
         self._cached_ports = ["l2cache.mem_side"]
+
+    def addThreeLevelCacheHierarchy(
+            self, ic, dc, l2c, l3c, iwc=None, dwc=None, xbar=None
+    ):
+        """
+        Adds a three-level cache hierarchy with private L1 and L2 caches per core,
+        and a shared L3 cache across all cores.
+        
+        Parameters:
+            ic: The L1 instruction cache.
+            dc: The L1 data cache.
+            l2c: The private L2 cache per core.
+            l3c: The shared L3 cache.
+            iwc: Optional instruction TLB walker cache.
+            dwc: Optional data TLB walker cache.
+            xbar: Optional crossbar between L2 and L3 caches.
+        """
+        # Set up private L1 and L2 caches
+        self.addPrivateSplitL2Cache(ic, dc, l2c, iwc, dwc)
+        
+        # Set up the L2-to-L3 crossbar if not provided
+        self.toL3Bus = xbar if xbar else L2XBar()
+        
+        # Connect each core's private L2 cache to the L2-to-L3 crossbar
+        self.l2cache.mem_side = self.toL3Bus.cpu_side_ports
+        
+        # Connect the L2-to-L3 crossbar to the shared L3 cache
+        self.l3cache = l3c
+        self.toL3Bus.mem_side_ports = l3c.cpu_side
+        
+        # Register L3 cache as a cached port
+        self._cached_ports.append("l3cache.mem_side")
+
 
     def createThreads(self):
         # If no ISAs have been created, assume that the user wants the
