@@ -183,7 +183,7 @@ def makeX86System(mem_mode, numCPUs=1, mdesc=None, workload=None, Ruby=False):
             self._num_simbricks = 0
             self._num_simbricks_mem = 0
             self._num_simbricks_mem_sidechannel = 0
-            self._devid_next = 0
+            self._devid_next = 5
 
         def add_simbricks_pci(self, url):
             print("adding simbricks pci:", url)

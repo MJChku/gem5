@@ -23,6 +23,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from m5.objects.BranchPredictor import *
 from m5.objects.BaseAtomicSimpleCPU import BaseAtomicSimpleCPU
 from m5.objects.BaseMinorCPU import BaseMinorCPU
 from m5.objects.BaseNonCachingSimpleCPU import BaseNonCachingSimpleCPU
@@ -35,7 +36,8 @@ from m5.objects.X86ISA import X86ISA
 from m5.objects.X86LocalApic import X86LocalApic
 from m5.objects.X86MMU import X86MMU
 from m5.proxy import Self
-from m5.objects.BranchPredictor import *
+from m5.objects import *
+import math
 
 
 class X86CPU:
@@ -83,6 +85,79 @@ class DefaultX86FUPool(FUPool):
         RdWrPort(),
         IprPort(),
     ]
+
+
+class X86O3CPU(BaseO3CPU, X86CPU):
+    mmu = X86MMU()
+    needsTSO = True
+
+    # For x86, each CC reg is used to hold only a subset of the
+    # flags, so we need 4-5 times the number of CC regs as
+    # physical integer regs to be sure we don't run out.  In
+    # typical real machines, CC regs are not explicitly renamed
+    # (it's a side effect of int reg renaming), so they should
+    # never be the bottleneck here.
+    numPhysCCRegs = Self.numPhysIntRegs * 5
+
+    # DIV and IDIV instructions in x86 are implemented using a loop which
+    # issues division microops.  The latency of these microops should really be
+    # one (or a small number) cycle each since each of these computes one bit
+    # of the quotient.
+    fuPool = DefaultX86FUPool()
+
+    fetchToDecodeDelay = depth
+    decodeToRenameDelay = 2
+    renameToIEWDelay = 3*depth
+    issueToExecuteDelay = 1
+    iewToCommitDelay = 2*depth
+
+    forwardComSize = 12
+    backComSize = 12
+
+    # Pipeline widths
+    fetchWidth = width
+    decodeWidth = width
+    renameWidth = width
+    dispatchWidth = width
+    issueWidth = width
+    wbWidth = width
+    commitWidth = width
+    squashWidth = width
+
+    # fuPool = ExecUnits()
+    # fuPool.FUList[0].count = 4
+    # fuPool.FUList[1].count = 4
+    # fuPool.FUList[2].count = 4
+    # fuPool.FUList[3].count = 4
+    # fuPool.FUList[4].count = 4
+    # fuPool.FUList[5].count = 4
+    # fuPool.FUList[6].count = 4
+    # fuPool.FUList[7].count = 4
+    # # IntDiv()
+    # fuPool.FUList[0].opList[1].opLat = 2
+    # # IntMult()
+    # fuPool.FUList[1].opList[1].opLat = 2
+
+
+    fetchBufferSize = 64
+    fetchQueueSize = 128
+    numROBEntries = 1024
+    numIQEntries = 512
+    LQEntries = 256
+    SQEntries = 224
+    numPhysIntRegs = 336
+    # numPhysFloatRegs = 256 # Need to change this
+    numPhysFloatRegs = 336
+    # LQEntries = 72
+    # SQEntries = 56
+    # numPhysIntRegs = 180
+    # numPhysVecRegs = 168
+    # numIQEntries = 50
+    # numROBEntries = 224
+    # branchPred = LTAGE()
+    # fetchWidth = 8
+    # decodeWidth = 8
+    # issueWidth = 8
 
 
 class port0(FUDesc):
@@ -208,155 +283,84 @@ class port7(FUDesc):
                ]
     count = 1
 
-class XeonExecUnits(FUPool):
+class ExecUnits(FUPool):
     FUList = [ port0(), port1(), port2(), port3(), port4(), port5(), port6(), port7() ]
 
-class XeonRAS(ReturnAddrStack):
-    numEntries = 32
 
-class XeonBTB(SimpleBTB):
-    numEntries = 512
-    tagBits = 19
+# class RAS(ReturnAddrStack):
+#     numEntries = 32
 
-class XeonIndirectPred(SimpleIndirectPredictor):
-    indirectSets = 128 # Cache sets for indirect predictor
-    indirectWays = 4 # Ways for indirect predictor
-    indirectTagSize = 16 # Indirect target cache tag bits
-    indirectPathLength = 7 # Previous indirect targets to use for path history
-    indirectGHRBits = 16 # Indirect GHR number of bits
+# class BTB(SimpleBTB):
+#     numEntries = 512
+#     tagBits = 19
 
-class XeonLTAGE_BP(LTAGE_TAGE):
-    nHistoryTables = 12
-    minHist = 4
-    maxHist = 34
-    tagTableTagWidths = [0, 7, 7, 8, 8, 9, 10, 11, 12, 12, 13, 14, 15]
-    logTagTableSizes = [14, 10, 10, 11, 11, 11, 11, 10, 10, 10, 10, 9, 9]
-    logUResetPeriod = 19
+# class IndirectPred(SimpleIndirectPredictor):
+#     indirectSets = 128 # Cache sets for indirect predictor
+#     indirectWays = 4 # Ways for indirect predictor
+#     indirectTagSize = 16 # Indirect target cache tag bits
+#     indirectPathLength = 7 # Previous indirect targets to use for path history
+#     indirectGHRBits = 16 # Indirect GHR number of bits
 
-class XeonBranchPred(LTAGE):
-    btb = XeonBTB()
-    ras = XeonRAS()
-    indirectBranchPred = XeonIndirectPred() # use NULL to disable
-    tage = XeonLTAGE_BP()
+# class LTAGE_BP(LTAGE_TAGE):
+#     nHistoryTables = 12
+#     minHist = 4
+#     maxHist = 34
+#     tagTableTagWidths = [0, 7, 7, 8, 8, 9, 10, 11, 12, 12, 13, 14, 15]
+#     logTagTableSizes = [14, 10, 10, 11, 11, 11, 11, 10, 10, 10, 10, 9, 9]
+#     logUResetPeriod = 19
 
-depth = 3
-width = 4
-class X86O3CPUNN(BaseO3CPU, X86CPU):
-    mmu = X86MMU()
-    needsTSO = True
+# class BranchPred(LTAGE):
+#     RASSize = 32
+#     btb = BTB()
+#     ras = RAS()
+#     indirectBranchPred = IndirectPred() # use NULL to disable
+#     tage = LTAGE_BP()
 
-    # For x86, each CC reg is used to hold only a subset of the
-    # flags, so we need 4-5 times the number of CC regs as
-    # physical integer regs to be sure we don't run out.  In
-    # typical real machines, CC regs are not explicitly renamed
-    # (it's a side effect of int reg renaming), so they should
-    # never be the bottleneck here.
-   
+# depth = 3
+# width = 4
+# class X86O3CPU(BaseO3CPU, X86CPU):
+#     """ Uncalibrated: Configured based on micro-architecture documentation """
 
-    # DIV and IDIV instructions in x86 are implemented using a loop which
-    # issues division microops.  The latency of these microops should really be
-    # one (or a small number) cycle each since each of these computes one bit
-    # of the quotient.
-    # fuPool = DefaultX86FUPool()
+#     branchPred = BranchPred()
 
-    branchPred = XeonBranchPred()
-    # Pipeline delays
-    fetchToDecodeDelay = depth
-    decodeToRenameDelay = 1
-    renameToIEWDelay = 3*depth
-    issueToExecuteDelay = 1
-    iewToCommitDelay = 2*depth
+#     # Pipeline delays
+#     # https://gem5-users.gem5.narkive.com/LNMJQ1M5/model-deeper-pipeline-in-x86#post2
+#     # to model 15 stage pipeline choose depth parameter as 3
+#     fetchToDecodeDelay = depth
+#     decodeToRenameDelay = 1
+#     renameToIEWDelay = 3*depth
+#     iewToCommitDelay = 2* depth
 
-    # add this as well
-    forwardComSize = 19
-    backComSize = 19
+#     forwardComSize = 19
+#     backComSize = 19
 
-    # Pipeline widths
-    fetchWidth = width * 2
-    decodeWidth = width * 2
-    renameWidth = 3*width
-    issueWidth = 2*width
-    dispatchWidth = 2*width
-    wbWidth = 2*width
-    commitWidth = 2*width
-    squashWidth = 3*width
+#     fuPool = ExecUnits()
 
-    fuPool = XeonExecUnits()
-    # IntDiv()
-    fuPool.FUList[0].opList[1].opLat = 2
-    # IntMult()
-    fuPool.FUList[1].opList[1].opLat = 2
-    # Load
-    fuPool.FUList[2].count = 12
-    # store
-    fuPool.FUList[4].count = 12
-    fuPool.FUList[6].count = 3
+#     # Pipeline widths
+#     fetchWidth = width
+#     decodeWidth = width
+#     renameWidth = 2*width
+#     dispatchWidth = 2*width
+#     issueWidth = 2*width
+#     wbWidth = 2*width
+#     commitWidth = 2*width
+#     squashWidth = 2*width
 
-    fetchBufferSize = 16
-    fetchQueueSize = 64
-    numROBEntries = 336
-    numIQEntries = 146
-    LQEntries = 72 * 2
-    SQEntries = 56 * 2
-    numPhysIntRegs = 270
-    numPhysFloatRegs = 252
-
-    numPhysCCRegs = Self.numPhysIntRegs * 5
-
-depth = 3
-width = 4
-class X86O3CPU(BaseO3CPU, X86CPU):
-    
-    # forwardComSize = 19
-    # backComSize = 19
-
-    # fetchWidth = width * 2
-    # decodeWidth = width * 2
-    # renameWidth = 3*width
-    # issueWidth = 2*width
-    # dispatchWidth = 2*width
-    # wbWidth = 2*width
-    # commitWidth = 2*width
-    # squashWidth = 3*width
-
-    # below are old; keep all
-
-    branchPred = XeonBranchPred()
-    # fetchBufferSize = 16
-    fetchQueueSize = 64
-    numROBEntries = 336
-    numIQEntries = 146
-    LQEntries = 72 * 2
-    SQEntries = 56 * 2
-    numPhysIntRegs = 270
-    numPhysFloatRegs = 252
-    mmu = X86MMU()
-    needsTSO = True
-
-    # For x86, each CC reg is used to hold only a subset of the
-    # flags, so we need 4-5 times the number of CC regs as
-    # physical integer regs to be sure we don't run out.  In
-    # typical real machines, CC regs are not explicitly renamed
-    # (it's a side effect of int reg renaming), so they should
-    # never be the bottleneck here.
-    numPhysCCRegs = Self.numPhysIntRegs * 5
-
-    # DIV and IDIV instructions in x86 are implemented using a loop which
-    # issues division microops.  The latency of these microops should really be
-    # one (or a small number) cycle each since each of these computes one bit
-    # of the quotient.
-    fuPool = DefaultX86FUPool()
-
-class X86MinorCPU(BaseMinorCPU, X86CPU):
-    mmu = X86MMU()
+#     fetchBufferSize = 16
+#     fetchQueueSize = 50
+#     numROBEntries = 224
+#     numIQEntries = 97
+#     LQEntries = 72
+#     SQEntries = 56
+#     numPhysIntRegs = 180
+#     numPhysFloatRegs = 168
 
 
 # depth = 3
 # width = 32
 # class X86O3CPU(BaseO3CPU, X86CPU):
-#     """ Configuration with maximum pipeline widths and mininum delays """
-
-#     branchPred = XeonBranchPred()
+    
+#     # branchPred = BranchPred()
 
 #     # Pipeline delays
 #     fetchToDecodeDelay = depth
@@ -378,19 +382,19 @@ class X86MinorCPU(BaseMinorCPU, X86CPU):
 #     commitWidth = width
 #     squashWidth = width
 
-#     fuPool = XeonExecUnits()
-#     fuPool.FUList[0].count = 4
-#     fuPool.FUList[1].count = 4
-#     fuPool.FUList[2].count = 4
-#     fuPool.FUList[3].count = 4
-#     fuPool.FUList[4].count = 4
-#     fuPool.FUList[5].count = 4
-#     fuPool.FUList[6].count = 4
-#     fuPool.FUList[7].count = 4
-#     # IntDiv()
-#     fuPool.FUList[0].opList[1].opLat = 2
-#     # IntMult()
-#     fuPool.FUList[1].opList[1].opLat = 2
+#     # fuPool = ExecUnits()
+#     # fuPool.FUList[0].count = 4
+#     # fuPool.FUList[1].count = 4
+#     # fuPool.FUList[2].count = 4
+#     # fuPool.FUList[3].count = 4
+#     # fuPool.FUList[4].count = 4
+#     # fuPool.FUList[5].count = 4
+#     # fuPool.FUList[6].count = 4
+#     # fuPool.FUList[7].count = 4
+#     # # IntDiv()
+#     # fuPool.FUList[0].opList[1].opLat = 2
+#     # # IntMult()
+#     # fuPool.FUList[1].opList[1].opLat = 2
 
 
 #     fetchBufferSize = 64
@@ -400,26 +404,37 @@ class X86MinorCPU(BaseMinorCPU, X86CPU):
 #     LQEntries = 256
 #     SQEntries = 224
 #     numPhysIntRegs = 336
-#     numPhysFloatRegs = 336 # Need to change this
-    
+#     # numPhysFloatRegs = 256 # Need to change this
+#     numPhysFloatRegs = 336
+#     # LQEntries = 72
+#     # SQEntries = 56
+#     # numPhysIntRegs = 180
+#     # numPhysVecRegs = 168
+#     # numIQEntries = 50
+#     # numROBEntries = 224
+#     # branchPred = LTAGE()
+#     # fetchWidth = 8
+#     # decodeWidth = 8
+#     # issueWidth = 8
+
 #     mmu = X86MMU()
 #     needsTSO = True
 
+#     # For x86, each CC reg is used to hold only a subset of the
+#     # flags, so we need 4-5 times the number of CC regs as
+#     # physical integer regs to be sure we don't run out.  In
+#     # typical real machines, CC regs are not explicitly renamed
+#     # (it's a side effect of int reg renaming), so they should
+#     # never be the bottleneck here.
+#     numPhysCCRegs = Self.numPhysIntRegs * 5
 
-class X86O3CPUNN(BaseO3CPU, X86CPU):
+
+#     # DIV and IDIV instructions in x86 are implemented using a loop which
+#     # issues division microops.  The latency of these microops should really be
+#     # one (or a small number) cycle each since each of these computes one bit
+#     # of the quotient.
+#     # fuPool = DefaultX86FUPool()
+   
+
+class X86MinorCPU(BaseMinorCPU, X86CPU):
     mmu = X86MMU()
-    needsTSO = True
-
-    # For x86, each CC reg is used to hold only a subset of the
-    # flags, so we need 4-5 times the number of CC regs as
-    # physical integer regs to be sure we don't run out.  In
-    # typical real machines, CC regs are not explicitly renamed
-    # (it's a side effect of int reg renaming), so they should
-    # never be the bottleneck here.
-    numPhysCCRegs = Self.numPhysIntRegs * 5
-
-    # DIV and IDIV instructions in x86 are implemented using a loop which
-    # issues division microops.  The latency of these microops should really be
-    # one (or a small number) cycle each since each of these computes one bit
-    # of the quotient.
-    fuPool = DefaultX86FUPool()
